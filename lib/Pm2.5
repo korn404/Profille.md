@@ -1,0 +1,345 @@
+import 'dart:ui';
+import 'package:flutter/material.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'weather_model.dart';
+import 'weather_service.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        fontFamily: 'Montserrat',
+      ),
+      home: const WeatherPage(),
+    );
+  }
+}
+
+class WeatherPage extends StatefulWidget {
+  const WeatherPage({super.key});
+  @override
+  State<WeatherPage> createState() => _WeatherPageState();
+}
+
+class _WeatherPageState extends State<WeatherPage> {
+  final _weatherService = WeatherService();
+  Weather? _pm25Data;
+  bool _isLoading = true;
+  String _currentCity = 'Bangkok';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWeatherData(_currentCity);
+  }
+  Future<void> _fetchWeatherData(String city) async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final pm25 = await _weatherService.fetchPM25(city);
+      final temperature = await _weatherService.fetchTemperature(city);
+      setState(() {
+        _pm25Data = pm25;
+        if (temperature != null && temperature.temperature != null) {
+          _pm25Data!.temperature = temperature.temperature;
+        }
+      });
+    } catch (e) {
+      print(e);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('ไม่สามารถดึงข้อมูลได้: $e')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+  void _onRefreshPressed() {
+    _fetchWeatherData(_currentCity);
+  }
+  void _showCityInputDialog() {
+    String newCity = _currentCity;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('เปลี่ยนเมือง'),
+          content: TextField(
+            decoration: const InputDecoration(hintText: "กรอกชื่อเมือง"),
+            autofocus: true,
+            onChanged: (value) {
+              newCity = value;
+            },
+          ),
+          actions: [
+            TextButton(
+              child: const Text('ยกเลิก'),
+              onPressed: () => Navigator.pop(context),
+            ),
+            TextButton(
+              child: const Text('ตกลง'),
+              onPressed: () {
+                Navigator.pop(context);
+                final cityTrim = newCity.trim();
+                if (cityTrim.isNotEmpty) {
+                  setState(() {
+                    _currentCity = cityTrim;
+                    _pm25Data = null;
+                  });
+                  _fetchWeatherData(cityTrim);
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Color _getPM25Color(int pm25) {
+    if (pm25 <= 50) {
+      return Colors.green[600]!;
+    } else if (pm25 <= 100) {
+      return Colors.yellow[700]!;
+    } else if (pm25 <= 150) {
+      return Colors.orange[700]!;
+    } else if (pm25 <= 200) {
+      return Colors.red[700]!;
+    } else if (pm25 <= 300) {
+      return Colors.purple[700]!;
+    } else {
+      return Colors.deepPurple[900]!;
+    }
+  }
+
+  String _getPM25Status(int pm25) {
+    if (pm25 <= 50) {
+      return 'คุณภาพดีมาก';
+    } else if (pm25 <= 100) {
+      return 'คุณภาพปานกลาง';
+    } else if (pm25 <= 150) {
+      return 'เริ่มมีผลกระทบต่อสุขภาพ';
+    } else if (pm25 <= 200) {
+      return 'มีผลกระทบต่อสุขภาพ';
+    } else if (pm25 <= 300) {
+      return 'มีผลกระทบต่อสุขภาพอย่างมาก';
+    } else {
+      return 'อันตราย';
+    }
+  }
+
+  LinearGradient _getBackgroundGradient(int? pm25) {
+    if (pm25 == null) {
+      return const LinearGradient(colors: [Color(0xFF42A5F5), Color(0xFF1976D2)]);
+    }
+    if (pm25 <= 50) {
+      return const LinearGradient(colors: [Color(0xFF8BC34A), Color(0xFF558B2F)]);
+    } else if (pm25 <= 100) {
+      return const LinearGradient(colors: [Color(0xFFFFEB3B), Color(0xFFFDD835)]);
+    } else if (pm25 <= 150) {
+      return const LinearGradient(colors: [Color(0xFFFF9800), Color(0xFFEF6C00)]);
+    } else if (pm25 <= 200) {
+      return const LinearGradient(colors: [Color(0xFFF44336), Color(0xFFC62828)]);
+    } else if (pm25 <= 300) {
+      return const LinearGradient(colors: [Color(0xFF9C27B0), Color(0xFF6A1B9A)]);
+    } else {
+      return const LinearGradient(colors: [Color(0xFF673AB7), Color(0xFF4527A0)]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ค่าฝุ่น PM2.5', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        centerTitle: true,
+        backgroundColor: Colors.grey,
+        elevation: 0,
+      ),
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        decoration: BoxDecoration(
+          gradient: _getBackgroundGradient(_pm25Data?.pm25),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: _isLoading
+                ? const SpinKitDoubleBounce(color: Colors.white, size: 50.0)
+                : _pm25Data == null
+                ? const Text(
+              'ไม่พบข้อมูล 😢\nกรุณาตรวจสอบชื่อเมือง',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            )
+                : _buildPM25Display(),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _isLoading ? null : _onRefreshPressed,
+        tooltip: 'Refresh Data',
+        backgroundColor: Colors.white.withOpacity(0.9),
+        child: const Icon(Icons.refresh, color: Colors.blueAccent),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  // Widget กล่องค้นหา
+  Widget _buildSearchBox() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(50),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: InkWell(
+        onTap: _showCityInputDialog,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search, color: Colors.white.withOpacity(0.8), size: 24),
+            const SizedBox(width: 8),
+            Text(
+              'เปลี่ยนเมือง',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPM25Display() {
+    final String tempDisplay = _pm25Data?.temperature != null
+        ? '${_pm25Data!.temperature!.toStringAsFixed(1)}°C'
+        : '-- °C';
+
+    final int pm25Value = _pm25Data?.pm25 ?? 0;
+    final Color pm25Color = _getPM25Color(pm25Value);
+    final String statusText = _getPM25Status(pm25Value);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildSearchBox(),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(25.0),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(25.0),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              padding: const EdgeInsets.all(30.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _pm25Data!.cityName,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(blurRadius: 10, color: Colors.black26, offset: Offset(2, 2))
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.thermostat, color: Colors.white, size: 28),
+                      const SizedBox(width: 10),
+                      Text(
+                        'อุณหภูมิ: ',
+                        style: TextStyle(
+                          fontSize: 22,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                      ),
+                      Text(
+                        tempDisplay,
+                        style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 40, thickness: 1.5, color: Colors.white38),
+                  const Text(
+                    'ค่าฝุ่น PM2.5 (AQI):',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '$pm25Value',
+                    style: TextStyle(
+                      fontSize: 90,
+                      fontWeight: FontWeight.w900,
+                      color: pm25Color,
+                      shadows: [
+                        Shadow(blurRadius: 15, color: pm25Color.withOpacity(0.5), offset: Offset(0, 0))
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    statusText,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                      shadows: [
+                        Shadow(blurRadius: 5, color: Colors.black38, offset: Offset(1, 1))
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'ที่มา aqicn.org',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                      color: Colors.white54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
