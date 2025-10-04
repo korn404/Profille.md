@@ -1,0 +1,350 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+void main() {
+  runApp(const MyApp());
+}
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Product CRUD App',
+      theme: ThemeData(
+        primarySwatch: Colors.teal,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        appBarTheme: const AppBarTheme(
+            foregroundColor: Colors.cyan
+        ),
+      ),
+      home: const ProductListScreen(),
+    );
+  }
+}
+// ส่วนที่ 2: ApiService สำหรับจัดการการเชื่อมต่อ API
+
+class ApiService {
+
+  static const String _baseUrl = 'http://localhost:3000/products';
+
+  static Future<List<dynamic>> fetchProducts() async {
+    final response = await http.get(Uri.parse(_baseUrl));
+    if (response.statusCode == 200) {
+      return json.decode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Failed to load products');
+    }
+  }
+
+  // เพิ่มสินค้า (POST)
+  static Future<void> createProduct(Map<String, dynamic> product) async {
+    final response = await http.post(
+      Uri.parse(_baseUrl),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: json.encode(product),
+    );
+    if (response.statusCode != 201) {
+      throw Exception('Failed to create product.');
+    }
+  }
+
+  // แก้ไขสินค้า (PUT)
+  static Future<void> updateProduct(String id, Map<String, dynamic> product) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/$id'),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: json.encode(product),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update product.');
+    }
+  }
+
+  // ลบสินค้า (DELETE)
+  static Future<void> deleteProduct(String id) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/$id'),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to delete product.');
+    }
+  }
+}
+//ส่วนที่ 3: รายการสินค้า
+class ProductListScreen extends StatefulWidget {
+  const ProductListScreen({super.key});
+  @override
+  State<ProductListScreen> createState() => _ProductListScreenState();
+}
+
+class _ProductListScreenState extends State<ProductListScreen> {
+  late Future<List<dynamic>> _productsFuture;
+  @override
+  void initState() {
+    super.initState();
+    _refreshProducts();
+  }
+  void _refreshProducts() {
+    setState(() {
+      _productsFuture = ApiService.fetchProducts();
+    });
+  }
+  void _navigateToAddScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProductFormScreen()),
+    );
+    _refreshProducts(); // รีเฟรชข้อมูลหลังจากกลับมาจากหน้าเพิ่ม
+  }
+  void _navigateToEditScreen(Map<String, dynamic> product) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => ProductFormScreen(product: product)),
+    );
+    _refreshProducts(); // รีเฟรชข้อมูลหลังจากกลับมาจากหน้าแก้ไข
+  }
+  void _deleteProduct(String id) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('ยืนยันการลบ'),
+          content: const Text('คุณต้องการลบสินค้านี้ใช่หรือไม่?'),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('ยกเลิก'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text('ลบ', style: TextStyle(color: Colors.red)),
+              onPressed: () async {
+                try {
+                  Navigator.of(context).pop(); // ปิด Dialog ก่อน
+                  await ApiService.deleteProduct(id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                        content: Text('ลบสินค้าสำเร็จ'),
+                        backgroundColor: Colors.green),
+                  );
+                  _refreshProducts();
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text('เกิดข้อผิดพลาด: $e'),
+                        backgroundColor: Colors.red),
+                  );
+                }
+              },),],
+        );
+      },
+    );
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.blueGrey,
+      appBar: AppBar(
+        title: const Text('-Products  ʕ•ᴥ•ʔ'),
+        backgroundColor: Colors.black,
+      ),
+      body: FutureBuilder<List<dynamic>>(
+        future: _productsFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('เกิดข้อผิดพลาด: ${snapshot.error}'));
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('ไม่มีข้อมูลสินค้า'));
+          }
+          final products = snapshot.data!;
+          return RefreshIndicator(
+            onRefresh: () async => _refreshProducts(),
+            child: ListView.builder(
+              itemCount: products.length,
+              itemBuilder: (context, index) {
+                final product = products[index];
+                final productId = product['id']?.toString() ?? '';
+
+                return Card(
+                  margin:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  child: ListTile(
+                    title: Text(product['name'] ?? 'ไม่มีชื่อ'),
+                    subtitle: Text('ราคา: ${product['price'] ?? 'N/A'} บาท'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blueAccent),
+                          onPressed: () => _navigateToEditScreen(product),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.redAccent),
+                          onPressed: () => _deleteProduct(productId),
+                        ),],
+                    ),),);
+              },),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _navigateToAddScreen,
+        backgroundColor: Colors.black,
+        child: const Icon(Icons.add, color: Colors.lightBlue),
+      ),
+    );
+  }
+}
+// ส่วนที่ 4: หน้าจอสำหรับเพิ่ม/แก้ไขข้อมูล
+class ProductFormScreen extends StatefulWidget {
+  final Map<String, dynamic>? product; // รับข้อมูลสินค้าเข้ามาถ้าเป็นการแก้ไข
+
+  const ProductFormScreen({super.key, this.product});
+
+  @override
+  State<ProductFormScreen> createState() => _ProductFormScreenState();
+}
+
+class _ProductFormScreenState extends State<ProductFormScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _priceController;
+  bool _isEditMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isEditMode = widget.product != null;
+
+    _nameController =
+        TextEditingController(text: _isEditMode ? widget.product!['name'] : '');
+    _descriptionController = TextEditingController(
+        text: _isEditMode ? widget.product!['description'] : '');
+    _priceController = TextEditingController(
+        text: _isEditMode ? widget.product!['price'].toString() : '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
+
+  void _saveProduct() async {
+    if (_formKey.currentState!.validate()) {
+      final productData = {
+        'name': _nameController.text,
+        'description': _descriptionController.text,
+        'price': double.tryParse(_priceController.text) ?? 0.0,
+      };
+
+      try {
+        if (_isEditMode) {
+          final productId = widget.product!['id'].toString();
+          await ApiService.updateProduct(productId, productData);
+        } else {
+          await ApiService.createProduct(productData);
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+              Text('บันทึกข้อมูล${_isEditMode ? 'แก้ไข' : 'ใหม่'}สำเร็จ'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('เกิดข้อผิดพลาดในการบันทึก: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_isEditMode ? 'แก้ไขสินค้า' : 'เพิ่มสินค้าใหม่'),
+        backgroundColor: Colors.black,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: ListView( // ใช้ ListView เพื่อป้องกันคีย์บอร์ดบัง
+            children: [
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'ชื่อสินค้า'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณากรอกชื่อสินค้า';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: 'รายละเอียด'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณากรอกรายละเอียดสินค้า';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                controller: _priceController,
+                decoration: const InputDecoration(labelText: 'ราคา'),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'กรุณากรอกราคา';
+                  }
+                  if (double.tryParse(value) == null) {
+                    return 'กรุณากรอกราคาเป็นตัวเลข';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 30),
+              ElevatedButton(
+                onPressed: _saveProduct,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white, // สีตัวอักษรบนปุ่ม
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+                child: const Text('บันทึก'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
