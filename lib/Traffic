@@ -1,0 +1,107 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+// enum เพื่อกำหนดสถานะของไฟจราจรให้ชัดเจนและอ่านง่าย
+enum TrafficLightState { red, yellow, green }
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ไฟ',
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+      ),
+      home: const TrafficLightPage(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+//ใช้StatefulWidget
+class TrafficLightPage extends StatefulWidget {
+  const TrafficLightPage({super.key});
+
+  @override
+  State<TrafficLightPage> createState() => _TrafficLightPageState();
+}
+class _TrafficLightPageState extends State<TrafficLightPage> {
+  TrafficLightState _currentState = TrafficLightState.red;
+  void _changeLight() {
+    setState(() {
+      switch (_currentState) {
+        case TrafficLightState.red:
+          _currentState = TrafficLightState.yellow;
+          break;
+        case TrafficLightState.yellow:
+          _currentState = TrafficLightState.green;
+          break;
+        case TrafficLightState.green:
+          _currentState = TrafficLightState.red;
+          break;
+      }
+    });
+  }
+  Widget _buildLight(Color color, TrafficLightState lightState) {
+    return AnimatedOpacity(
+      // ปรับความเร็วไฟระยะเวลาของ
+      duration: const Duration(milliseconds: 150),
+      opacity: _currentState == lightState ? 1.0 : 0.3,
+      child: Container(
+        width: 100,
+        height: 100,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Traffic'),
+        backgroundColor: Colors.black,
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // กรอบสีดำสำหรับตัวโคมไฟ
+            Container(padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildLight(Colors.red, TrafficLightState.red),
+                  const SizedBox(height: 20),
+                  _buildLight(Colors.yellow, TrafficLightState.yellow),
+                  const SizedBox(height: 20),
+                  _buildLight(Colors.green, TrafficLightState.green),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+            // ปุ่มเปลี่ยนไฟ
+            ElevatedButton(
+              onPressed: _changeLight,
+              style: ElevatedButton.styleFrom(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 40, vertical: 15),),
+              child: const Text('เปลี่ยนไฟ', style: TextStyle(fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
